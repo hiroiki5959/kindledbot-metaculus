@@ -3,7 +3,7 @@ name: Forecast on new AI tournament questions
 on:
   workflow_dispatch:
   schedule:
-    - cron: "7,27,47 * * * *" # every 20 min, offset off the hour. Make sure to skip already-forecasted questions!
+    - cron: "30 8 * * *" # kindledbot: once a day at 08:30 UTC (17:30 JST), just after the Gemini free-tier daily reset
 
 # Add concurrency group to prevent parallel runs
 concurrency:
