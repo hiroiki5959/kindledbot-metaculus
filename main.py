@@ -63,6 +63,36 @@ class PacedLlm(GeneralLlm):
 
 
 _PACE_LOCK = asyncio.Lock()
+def _bound_to_float(b):
+    if b is None:
+        return None
+    if isinstance(b, datetime):
+        return b.timestamp()
+    return float(b)
+
+
+def clamp_percentiles(percentile_list: list, question) -> list:
+    """kindledbot: an out-of-range percentile (e.g. a wrongly parsed date) makes the whole question fail
+    with 'percentiles are far exceeding the bounds'. Keep values within a small margin of the question
+    range and strictly increasing, so the forecast is still submitted."""
+    lb = _bound_to_float(getattr(question, "lower_bound", None))
+    ub = _bound_to_float(getattr(question, "upper_bound", None))
+    if lb is None or ub is None or ub <= lb:
+        return percentile_list
+    margin = (ub - lb) * 0.05
+    lo, hi = lb - margin, ub + margin
+    eps = (ub - lb) * 1e-6
+    out, prev = [], None
+    for pc in sorted(percentile_list, key=lambda x: x.percentile):
+        v = min(max(pc.value, lo), hi)
+        if prev is not None and v <= prev:
+            v = prev + eps
+        out.append(Percentile(percentile=pc.percentile, value=v))
+        prev = v
+    if any(abs(a.value - b.value) > 1e-9 for a, b in zip(out, sorted(percentile_list, key=lambda x: x.percentile))):
+        logger.warning(f"Clamped out-of-range percentiles for {getattr(question, 'page_url', '')}")
+    return out
+
 _PACE_STATE = {"last": 0.0, "min_interval": 25.0}  # Groq free tier: 8k tokens/min, 1k requests/day, 200k tokens/day
 
 
@@ -446,6 +476,7 @@ class FallTemplateBot2026(ForecastBot):
             additional_instructions=parsing_instructions,
             num_validation_samples=self._structure_output_validation_samples,
         )
+        percentile_list = clamp_percentiles(percentile_list, question)
         prediction = NumericDistribution.from_question(percentile_list, question)
         logger.info(
             f"Forecasted URL {question.page_url} with prediction: {prediction.declared_percentiles}."
@@ -546,6 +577,7 @@ class FallTemplateBot2026(ForecastBot):
             )
             for percentile in date_percentile_list
         ]
+        percentile_list = clamp_percentiles(percentile_list, question)
         prediction = NumericDistribution.from_question(percentile_list, question)
         logger.info(
             f"Forecasted URL {question.page_url} with prediction: {prediction.declared_percentiles}."
