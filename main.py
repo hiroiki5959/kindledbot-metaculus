@@ -63,7 +63,7 @@ class PacedLlm(GeneralLlm):
 
 
 _PACE_LOCK = asyncio.Lock()
-_PACE_STATE = {"last": 0.0, "min_interval": 13.0}
+_PACE_STATE = {"last": 0.0, "min_interval": 25.0}  # Groq free tier: 8k tokens/min, 1k requests/day, 200k tokens/day
 
 
 class FallTemplateBot2026(ForecastBot):
@@ -737,18 +737,18 @@ if __name__ == "__main__":
         folder_to_save_reports_to=None,
         skip_previously_forecasted_questions=True,
         extra_metadata_in_explanation=True,
-        # kindledbot: use Google Gemini (GEMINI_API_KEY) until Metaculus LLM credits arrive.
+        # kindledbot: use Groq free tier (GROQ_API_KEY) until Metaculus LLM credits arrive.
         # Spread calls over two models because the free tier counts requests per model.
         llms={
             "default": PacedLlm(
-                model="gemini/gemini-3.6-flash",
+                model="groq/openai/gpt-oss-120b",
                 temperature=0.3,
                 timeout=120,
                 allowed_tries=4,
             ),
-            "summarizer": PacedLlm(model="gemini/gemini-3.6-flash", timeout=120, allowed_tries=4),
-            "researcher": PacedLlm(model="gemini/gemini-3.6-flash", temperature=0.2, timeout=120, allowed_tries=4),
-            "parser": PacedLlm(model="gemini/gemini-3.6-flash", timeout=120, allowed_tries=4),
+            "summarizer": PacedLlm(model="groq/openai/gpt-oss-120b", timeout=120, allowed_tries=4),
+            "researcher": PacedLlm(model="groq/openai/gpt-oss-120b", temperature=0.2, timeout=120, allowed_tries=4),
+            "parser": PacedLlm(model="groq/openai/gpt-oss-120b", timeout=120, allowed_tries=4),
         },
     )
 
@@ -766,9 +766,14 @@ if __name__ == "__main__":
     # summary printers below.
     client = MetaculusClient()
     if run_mode == "tournament":
-        # kindledbot: the seasonal tournament (300-500 questions) does not fit the Gemini free tier.
-        # Only MiniBench runs until RUN_SEASONAL=1 is set (after LLM credits arrive).
-        if os.getenv("RUN_SEASONAL") == "1":
+        # kindledbot: MiniBench first, then the seasonal tournament unless RUN_SEASONAL=0.
+        # Questions already forecast are skipped, so each run continues where the daily quota stopped.
+        minibench_reports = asyncio.run(
+            template_bot.forecast_on_tournament(
+                client.CURRENT_MINIBENCH_ID, return_exceptions=True
+            )
+        )
+        if os.getenv("RUN_SEASONAL", "1") != "0":
             seasonal_tournament_reports = asyncio.run(
                 template_bot.forecast_on_tournament(
                     client.CURRENT_AI_COMPETITION_ID, return_exceptions=True
@@ -776,11 +781,6 @@ if __name__ == "__main__":
             )
         else:
             seasonal_tournament_reports = []
-        minibench_reports = asyncio.run(
-            template_bot.forecast_on_tournament(
-                client.CURRENT_MINIBENCH_ID, return_exceptions=True
-            )
-        )
         forecast_reports = seasonal_tournament_reports + minibench_reports
     elif run_mode == "metaculus_cup":
         # The Metaculus Cup may be uninitialized near the start of a season

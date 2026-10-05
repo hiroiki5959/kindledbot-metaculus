@@ -3,7 +3,7 @@ name: Forecast on new AI tournament questions
 on:
   workflow_dispatch:
   schedule:
-    - cron: "30 8 * * *" # kindledbot: once a day at 08:30 UTC (17:30 JST), just after the Gemini free-tier daily reset
+    - cron: "17 */4 * * *" # kindledbot: every 4 hours (Groq free tier daily token budget; already-forecast questions are skipped)
 
 # Add concurrency group to prevent parallel runs
 concurrency:
@@ -50,6 +50,7 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           RUN_SEASONAL: ${{ vars.RUN_SEASONAL }}
           ASKNEWS_CLIENT_ID: ${{ secrets.ASKNEWS_CLIENT_ID }}
           ASKNEWS_SECRET: ${{ secrets.ASKNEWS_SECRET }}
