@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -124,7 +125,8 @@ class FallTemplateBot2026(ForecastBot):
         1  # Set this to whatever works for your search-provider/ai-model rate limits
     )
     _concurrency_limiter = asyncio.Semaphore(_max_concurrent_questions)
-    _structure_output_validation_samples = 2
+    # kindledbot: Gemini free tier is ~20 requests/day per model, so keep calls per question minimal
+    _structure_output_validation_samples = 1
 
     ##################################### RESEARCH #####################################
 
@@ -709,23 +711,25 @@ if __name__ == "__main__":
     # uncomment and edit to pin specific models.
     template_bot = FallTemplateBot2026(
         research_reports_per_question=1,
-        predictions_per_research_report=5,
+        predictions_per_research_report=1,  # kindledbot: 1 forecast per question to fit the Gemini free tier
         use_research_summary_to_forecast=False,
         publish_reports_to_metaculus=publish_to_metaculus,
         folder_to_save_reports_to=None,
         skip_previously_forecasted_questions=True,
         extra_metadata_in_explanation=True,
-        # llms={
-        #     "default": GeneralLlm(
-        #         model="openrouter/openai/gpt-4o",
-        #         temperature=0.3,
-        #         timeout=40,
-        #         allowed_tries=2,
-        #     ),
-        #     "summarizer": "openai/gpt-4o-mini",
-        #     "researcher": "asknews/news-summaries",
-        #     "parser": "openai/gpt-4o-mini",
-        # },
+        # kindledbot: use Google Gemini (GEMINI_API_KEY) until Metaculus LLM credits arrive.
+        # Spread calls over two models because the free tier counts requests per model.
+        llms={
+            "default": GeneralLlm(
+                model="gemini/gemini-3.6-flash",
+                temperature=0.3,
+                timeout=120,
+                allowed_tries=1,
+            ),
+            "summarizer": GeneralLlm(model="gemini/gemini-3.5-flash", timeout=120, allowed_tries=1),
+            "researcher": GeneralLlm(model="gemini/gemini-3.5-flash", temperature=0.2, timeout=120, allowed_tries=1),
+            "parser": GeneralLlm(model="gemini/gemini-3.5-flash", timeout=120, allowed_tries=1),
+        },
     )
 
     # Per-mode tournament URL shown in the summary banner footer. These
@@ -742,11 +746,16 @@ if __name__ == "__main__":
     # summary printers below.
     client = MetaculusClient()
     if run_mode == "tournament":
-        seasonal_tournament_reports = asyncio.run(
-            template_bot.forecast_on_tournament(
-                client.CURRENT_AI_COMPETITION_ID, return_exceptions=True
+        # kindledbot: the seasonal tournament (300-500 questions) does not fit the Gemini free tier.
+        # Only MiniBench runs until RUN_SEASONAL=1 is set (after LLM credits arrive).
+        if os.getenv("RUN_SEASONAL") == "1":
+            seasonal_tournament_reports = asyncio.run(
+                template_bot.forecast_on_tournament(
+                    client.CURRENT_AI_COMPETITION_ID, return_exceptions=True
+                )
             )
-        )
+        else:
+            seasonal_tournament_reports = []
         minibench_reports = asyncio.run(
             template_bot.forecast_on_tournament(
                 client.CURRENT_MINIBENCH_ID, return_exceptions=True
