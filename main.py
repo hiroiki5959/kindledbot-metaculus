@@ -726,9 +726,9 @@ if __name__ == "__main__":
                 timeout=120,
                 allowed_tries=1,
             ),
-            "summarizer": GeneralLlm(model="gemini/gemini-3.5-flash", timeout=120, allowed_tries=1),
-            "researcher": GeneralLlm(model="gemini/gemini-3.5-flash", temperature=0.2, timeout=120, allowed_tries=1),
-            "parser": GeneralLlm(model="gemini/gemini-3.5-flash", timeout=120, allowed_tries=1),
+            "summarizer": GeneralLlm(model="gemini/gemini-3.6-flash", timeout=120, allowed_tries=1),
+            "researcher": GeneralLlm(model="gemini/gemini-3.6-flash", temperature=0.2, timeout=120, allowed_tries=1),
+            "parser": GeneralLlm(model="gemini/gemini-3.6-flash", timeout=120, allowed_tries=1),
         },
     )
 
