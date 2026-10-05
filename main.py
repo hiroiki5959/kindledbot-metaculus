@@ -45,6 +45,26 @@ from forecasting_tools import (
 dotenv.load_dotenv()
 logger = logging.getLogger(__name__)
 
+import time
+
+
+class PacedLlm(GeneralLlm):
+    """kindledbot: Gemini free tier allows 5 requests/minute per model and often returns 503 on the
+    first try. Space every call at least MIN_INTERVAL seconds apart (across all roles) and let
+    GeneralLlm retry (allowed_tries) on transient errors."""
+
+    async def invoke(self, *args, **kwargs):
+        async with _PACE_LOCK:
+            wait = _PACE_STATE["min_interval"] - (time.monotonic() - _PACE_STATE["last"])
+            if wait > 0:
+                await asyncio.sleep(wait)
+            _PACE_STATE["last"] = time.monotonic()
+        return await super().invoke(*args, **kwargs)
+
+
+_PACE_LOCK = asyncio.Lock()
+_PACE_STATE = {"last": 0.0, "min_interval": 13.0}
+
 
 class FallTemplateBot2026(ForecastBot):
     """
@@ -720,15 +740,15 @@ if __name__ == "__main__":
         # kindledbot: use Google Gemini (GEMINI_API_KEY) until Metaculus LLM credits arrive.
         # Spread calls over two models because the free tier counts requests per model.
         llms={
-            "default": GeneralLlm(
+            "default": PacedLlm(
                 model="gemini/gemini-3.6-flash",
                 temperature=0.3,
                 timeout=120,
-                allowed_tries=1,
+                allowed_tries=4,
             ),
-            "summarizer": GeneralLlm(model="gemini/gemini-3.6-flash", timeout=120, allowed_tries=1),
-            "researcher": GeneralLlm(model="gemini/gemini-3.6-flash", temperature=0.2, timeout=120, allowed_tries=1),
-            "parser": GeneralLlm(model="gemini/gemini-3.6-flash", timeout=120, allowed_tries=1),
+            "summarizer": PacedLlm(model="gemini/gemini-3.6-flash", timeout=120, allowed_tries=4),
+            "researcher": PacedLlm(model="gemini/gemini-3.6-flash", temperature=0.2, timeout=120, allowed_tries=4),
+            "parser": PacedLlm(model="gemini/gemini-3.6-flash", timeout=120, allowed_tries=4),
         },
     )
 
